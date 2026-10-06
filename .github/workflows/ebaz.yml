@@ -1,0 +1,66 @@
+name: build-ebaz4205
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout EBAZ4205 external tree
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git rsync bc libncurses5-dev file wget cpio \
+            python3 unzip bzip2 gzip patch perl sed tar
+
+      - name: Cache Buildroot downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildroot-download-cache
+            buildroot/dl
+          key: ${{ runner.os }}-buildroot-2020.11.4-${{ hashFiles('configs/zynq_ebaz4205_defconfig') }}
+
+      - name: Fetch Buildroot 2020.11.4
+        run: |
+          wget -q https://buildroot.org/downloads/buildroot-2020.11.4.tar.gz
+          tar -xzf buildroot-2020.11.4.tar.gz
+          mv buildroot-2020.11.4 buildroot
+
+      - name: Configure
+        run: |
+          make -C buildroot BR2_EXTERNAL="$GITHUB_WORKSPACE" zynq_ebaz4205_defconfig
+
+      - name: Build
+        run: |
+          make -C buildroot -j"$(nproc)" 2>&1 | tee build.log
+
+      - name: Collect build metadata
+        run: |
+          {
+            echo "Buildroot: 2020.11.4"
+            echo "External tree: $GITHUB_WORKSPACE"
+            echo
+            sha256sum buildroot/output/images/* 2>/dev/null || true
+          } | tee build-metadata.txt
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebaz4205-output-images
+          path: buildroot/output/images/
+          if-no-files-found: error
+
+      - name: Upload build log and metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebaz4205-build-logs
+          path: |
+            build.log
+            build-metadata.txt
