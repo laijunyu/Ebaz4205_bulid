@@ -1,0 +1,29 @@
+EBAZ4205 Buildroot software deliverable
+
+Upstream base:
+  https://github.com/embed-me/ebaz4205_buildroot
+
+Verified from upstream source/docs:
+  - BR2_EXTERNAL project exists and contains zynq_ebaz4205_defconfig
+  - upstream declares Buildroot 2020.11.x
+  - upstream defconfig enables Dropbear and root/root
+  - upstream overlay configures eth0 by DHCP
+  - upstream documents the EBAZ4205 SD boot file set
+
+Included:
+  README.md
+  build.sh
+  apply-to-upstream.sh
+  configs/zynq_ebaz4205_defconfig
+  ebaz4205/fs-overlay/etc/network/interfaces
+  .github/workflows/build-ebaz4205.yml
+  0001-ebaz4205-explicit-dhcp.patch
+
+Hardware validation:
+  NOT PERFORMED.
+
+Binary Buildroot output:
+  NOT GENERATED in this execution environment. The build container has no
+  outbound network/DNS access, so Buildroot and its third-party source
+  archives could not be fetched. No binary artifact is represented as a
+  successful build.

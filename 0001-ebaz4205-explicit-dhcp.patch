@@ -1,0 +1,11 @@
+diff --git a/configs/zynq_ebaz4205_defconfig b/configs/zynq_ebaz4205_defconfig
+--- a/configs/zynq_ebaz4205_defconfig
++++ b/configs/zynq_ebaz4205_defconfig
+@@ -3,6 +3,7 @@ BR2_cortex_a9=y
+ BR2_ARM_ENABLE_NEON=y
+ BR2_ARM_ENABLE_VFP=y
+ BR2_TARGET_GENERIC_GETTY_PORT="ttyPS0"
++BR2_SYSTEM_DHCP="eth0"
+ BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_EMBEDME_EBAZ4205_PATH)/ebaz4205/fs-overlay"
+ BR2_LINUX_KERNEL=y
+ BR2_LINUX_KERNEL_VERSION="4.19"
