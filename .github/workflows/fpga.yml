@@ -1,0 +1,75 @@
+name: Build EBAZ4205 FPGA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+
+jobs:
+
+  build-fpga:
+
+    name: Vivado FPGA Build
+    runs-on: ubuntu-22.04
+
+
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+
+    # 下载社区 FPGA 工程
+    - name: Download EBAZ4205 Vivado project
+      run: |
+        git clone \
+          --depth 1 \
+          https://github.com/KeitetsuWorks/EBAZ4205.git \
+          ebaz4205_vivado
+
+
+        echo "===== Project ====="
+        ls -la ebaz4205_vivado
+
+
+    # 检查 Vivado 工程文件
+    - name: Check Vivado project
+      run: |
+
+        find ebaz4205_vivado \
+        -name "*.xpr" \
+        -o \
+        -name "*.tcl"
+
+
+    # 注意：
+    # GitHub 官方 runner 没有 Vivado
+    #
+    # 真正编译需要：
+    #
+    # self-hosted runner
+    # + Vivado 2020.2/2021.2
+    #
+    # 这里先保留接口
+
+    - name: Vivado build placeholder
+      run: |
+
+        echo "================================"
+        echo "Vivado build requires Xilinx Vivado"
+        echo "Use self-hosted runner with Vivado installed"
+        echo "================================"
+
+
+    # 保存 FPGA 工程
+    - name: Upload FPGA project
+      uses: actions/upload-artifact@v4
+      with:
+
+        name: ebaz4205-vivado-project
+
+        path:
+
+          ebaz4205_vivado/
