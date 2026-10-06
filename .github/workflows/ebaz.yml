@@ -1,66 +1,336 @@
-name: build-ebaz4205
+name: Build EBAZ4205 Buildroot
 
 on:
   push:
+    branches:
+      - "**"
+
   workflow_dispatch:
 
 jobs:
   build:
+    name: Build EBAZ4205
     runs-on: ubuntu-22.04
+
     steps:
-      - name: Checkout EBAZ4205 external tree
+      # ============================================================
+      # 1. Checkout 你的 GitHub 仓库
+      # ============================================================
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install host dependencies
+      # ============================================================
+      # 2. 安装构建依赖
+      # ============================================================
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential git rsync bc libncurses5-dev file wget cpio \
-            python3 unzip bzip2 gzip patch perl sed tar
 
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            rsync \
+            bc \
+            bison \
+            flex \
+            libncurses5-dev \
+            libncurses-dev \
+            libssl-dev \
+            libelf-dev \
+            device-tree-compiler \
+            file \
+            wget \
+            curl \
+            cpio \
+            unzip \
+            bzip2 \
+            gzip \
+            tar \
+            patch \
+            perl \
+            python3 \
+            python3-pip \
+            sed \
+            xz-utils \
+            dosfstools \
+            mtools \
+            genimage
+
+      # ============================================================
+      # 3. 下载 EBAZ4205 官方社区 Buildroot External Tree
+      #
+      # 这个仓库才是真正的 BR2_EXTERNAL。
+      #
+      # 社区项目：
+      # https://github.com/embed-me/ebaz4205_buildroot
+      # ============================================================
+      - name: Download EBAZ4205 BSP
+        run: |
+          git clone \
+            --depth 1 \
+            --branch master \
+            https://github.com/embed-me/ebaz4205_buildroot.git \
+            ebaz4205_buildroot
+
+          echo "===== EBAZ4205 BSP ====="
+          ls -la ebaz4205_buildroot
+          echo "======================="
+
+          echo "Checking BR2_EXTERNAL files..."
+
+          test -f ebaz4205_buildroot/external.desc
+          test -f ebaz4205_buildroot/Config.in
+          test -f ebaz4205_buildroot/external.mk
+
+          echo "BR2_EXTERNAL OK"
+
+      # ============================================================
+      # 4. 下载 Buildroot 2020.11.4
+      #
+      # EBAZ4205 社区 BSP 当前明确使用 2020.11.x。
+      # ============================================================
+      - name: Download Buildroot
+        run: |
+          BUILDROOT_VERSION="2020.11.4"
+
+          wget \
+            -q \
+            --show-progress \
+            "https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.gz"
+
+          tar \
+            -xzf \
+            "buildroot-${BUILDROOT_VERSION}.tar.gz"
+
+          mv \
+            "buildroot-${BUILDROOT_VERSION}" \
+            buildroot
+
+          echo "===== Buildroot version ====="
+          make -C buildroot --version | head -n 1
+          echo "============================="
+
+      # ============================================================
+      # 5. 读取社区 EBAZ4205 defconfig
+      #
+      # 社区 defconfig 本身已经：
+      # - Zynq Cortex-A9
+      # - Linux 4.19
+      # - U-Boot
+      # - Dropbear
+      # - root/root
+      # - EBAZ4205 DTS
+      #
+      # 我们只额外确保系统级 DHCP 指定 eth0。
+      # 原仓库 overlay 本身也已经是 eth0 DHCP。
+      # ============================================================
+      - name: Prepare EBAZ4205 configuration
+        run: |
+          DEFCONFIG="ebaz4205_buildroot/configs/zynq_ebaz4205_defconfig"
+
+          test -f "$DEFCONFIG"
+
+          echo "===== Original defconfig ====="
+          cat "$DEFCONFIG"
+          echo "=============================="
+
+          # 如果没有明确指定系统 DHCP 接口，则补上 eth0。
+          if ! grep -q '^BR2_SYSTEM_DHCP=' "$DEFCONFIG"; then
+            echo 'BR2_SYSTEM_DHCP="eth0"' >> "$DEFCONFIG"
+          fi
+
+          echo "===== Final defconfig ====="
+          cat "$DEFCONFIG"
+          echo "==========================="
+
+      # ============================================================
+      # 6. 验证社区 BSP 的关键文件
+      # ============================================================
+      - name: Validate BSP
+        run: |
+          set -e
+
+          echo "Checking DTS..."
+          test -f \
+            ebaz4205_buildroot/ebaz4205/dts/ebaz4205-zynq7.dts
+
+          test -f \
+            ebaz4205_buildroot/ebaz4205/dts/ebaz4205-board.dtsi
+
+          test -f \
+            ebaz4205_buildroot/ebaz4205/dts/ebaz4205-pl.dtsi
+
+          echo "Checking Linux config..."
+          test -f \
+            ebaz4205_buildroot/ebaz4205/linux/linux.config
+
+          echo "Checking network configuration..."
+          test -f \
+            ebaz4205_buildroot/ebaz4205/fs-overlay/etc/network/interfaces
+
+          echo "===== network/interfaces ====="
+          cat \
+            ebaz4205_buildroot/ebaz4205/fs-overlay/etc/network/interfaces
+          echo "=============================="
+
+          echo "BSP validation passed."
+
+      # ============================================================
+      # 7. 配置 Buildroot
+      #
+      # 注意：
+      # 这里 BR2_EXTERNAL 指向：
+      #
+      #   $GITHUB_WORKSPACE/ebaz4205_buildroot
+      #
+      # 而不是你的 GitHub 仓库根目录。
+      # ============================================================
+      - name: Configure Buildroot
+        run: |
+          set -e
+
+          make \
+            -C buildroot \
+            BR2_EXTERNAL="$GITHUB_WORKSPACE/ebaz4205_buildroot" \
+            zynq_ebaz4205_defconfig
+
+      # ============================================================
+      # 8. 检查最终 .config
+      # ============================================================
+      - name: Check final configuration
+        run: |
+          set -e
+
+          echo "===== Important Buildroot options ====="
+
+          grep -E \
+            '^(BR2_SYSTEM_DHCP|BR2_PACKAGE_DROPBEAR|BR2_TARGET_GENERIC_ROOT_PASSWD|BR2_LINUX_KERNEL|BR2_TARGET_UBOOT)' \
+            buildroot/.config || true
+
+          echo "========================================"
+
+          echo "===== External tree ====="
+
+          grep -E \
+            'BR2_EXTERNAL' \
+            buildroot/.config \
+            2>/dev/null || true
+
+          echo "========================================"
+
+      # ============================================================
+      # 9. 缓存 Buildroot 下载目录
+      # ============================================================
       - name: Cache Buildroot downloads
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.buildroot-download-cache
-            buildroot/dl
-          key: ${{ runner.os }}-buildroot-2020.11.4-${{ hashFiles('configs/zynq_ebaz4205_defconfig') }}
+          path: buildroot/dl
+          key: |
+            ${{ runner.os }}-ebaz4205-buildroot-2020.11.4-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ebaz4205-buildroot-2020.11.4-
 
-      - name: Fetch Buildroot 2020.11.4
-        run: |
-          wget -q https://buildroot.org/downloads/buildroot-2020.11.4.tar.gz
-          tar -xzf buildroot-2020.11.4.tar.gz
-          mv buildroot-2020.11.4 buildroot
-
-      - name: Configure
-        run: |
-          make -C buildroot BR2_EXTERNAL="$GITHUB_WORKSPACE" zynq_ebaz4205_defconfig
-
+      # ============================================================
+      # 10. 正式编译
+      #
+      # Buildroot 会继续自动下载：
+      # - Linux
+      # - U-Boot
+      # - BusyBox
+      # - Dropbear
+      # - toolchain
+      # - 其它所需源码
+      # ============================================================
       - name: Build
         run: |
-          make -C buildroot -j"$(nproc)" 2>&1 | tee build.log
+          set -o pipefail
 
-      - name: Collect build metadata
+          make \
+            -C buildroot \
+            -j"$(nproc)" \
+            2>&1 | tee build.log
+
+      # ============================================================
+      # 11. 显示最终产物
+      # ============================================================
+      - name: Show output files
         run: |
-          {
-            echo "Buildroot: 2020.11.4"
-            echo "External tree: $GITHUB_WORKSPACE"
-            echo
-            sha256sum buildroot/output/images/* 2>/dev/null || true
-          } | tee build-metadata.txt
+          set -e
 
-      - name: Upload images
+          echo "======================================"
+          echo "       EBAZ4205 BUILD OUTPUT"
+          echo "======================================"
+
+          ls -lah \
+            buildroot/output/images/
+
+          echo "======================================"
+
+      # ============================================================
+      # 12. 检查关键输出
+      # ============================================================
+      - name: Verify output
+        run: |
+          set -e
+
+          IMAGE_DIR="buildroot/output/images"
+
+          test -d "$IMAGE_DIR"
+
+          echo "Checking generated files..."
+
+          for file in \
+            boot.bin \
+            u-boot.bin \
+            u-boot.img \
+            uImage \
+            rootfs.cpio.uboot \
+            ebaz4205-zynq7.dtb
+          do
+            if [ -f "$IMAGE_DIR/$file" ]; then
+              echo "OK: $file"
+            else
+              echo "WARNING: missing $file"
+            fi
+          done
+
+          echo
+          echo "All output files:"
+          find "$IMAGE_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      # ============================================================
+      # 13. 生成 SHA256
+      # ============================================================
+      - name: Generate checksums
+        run: |
+          set -e
+
+          cd buildroot/output/images
+
+          sha256sum \
+            * \
+            > SHA256SUMS
+
+          cat SHA256SUMS
+
+      # ============================================================
+      # 14. 上传最终 Buildroot 镜像
+      # ============================================================
+      - name: Upload Buildroot images
         uses: actions/upload-artifact@v4
         with:
-          name: ebaz4205-output-images
-          path: buildroot/output/images/
+          name: ebaz4205-buildroot-images
+          path: |
+            buildroot/output/images/**
           if-no-files-found: error
 
-      - name: Upload build log and metadata
+      # ============================================================
+      # 15. 上传构建日志
+      # ============================================================
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ebaz4205-build-logs
-          path: |
-            build.log
-            build-metadata.txt
+          name: ebaz4205-build-log
+          path: build.log
+          if-no-files-found: ignore
