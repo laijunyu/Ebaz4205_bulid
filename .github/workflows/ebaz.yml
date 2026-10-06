@@ -1,45 +1,41 @@
 name: Build EBAZ4205 Linux
 
-
 on:
-
   workflow_dispatch:
-
   push:
-
     branches:
-
       - main
-
 
 
 jobs:
 
-
   build-linux:
 
-
-    name: Buildroot Linux
+    name: Buildroot EBAZ4205
 
     runs-on: ubuntu-22.04
-
 
 
     steps:
 
 
+    # -----------------------------
+    # 下载你的空仓库
+    # -----------------------------
     - name: Checkout
 
       uses: actions/checkout@v4
 
 
 
+    # -----------------------------
+    # 安装 Ubuntu 依赖
+    # -----------------------------
     - name: Install dependencies
 
       run: |
 
         sudo apt update
-
 
         sudo apt install -y \
           build-essential \
@@ -65,19 +61,17 @@ jobs:
 
 
 
+    # -----------------------------
     # 下载 EBAZ4205 Buildroot BSP
-
-    - name: Download Buildroot BSP
+    # -----------------------------
+    - name: Download EBAZ4205 BSP
 
       run: |
 
-
-        git clone \
-          --depth 1 \
-          https://github.com/embed-me/ebaz4205_buildroot.git \
-          ebaz4205_buildroot
+        git clone --depth 1 https://github.com/embed-me/ebaz4205_buildroot.git ebaz4205_buildroot
 
 
+        echo "Check external.desc"
 
         test -f ebaz4205_buildroot/external.desc
 
@@ -86,69 +80,98 @@ jobs:
 
 
 
+    # -----------------------------
     # 下载 Buildroot
-
+    # -----------------------------
     - name: Download Buildroot 2020.11.4
 
       run: |
 
-
-        wget \
-
-          https://buildroot.org/downloads/buildroot-2020.11.4.tar.gz
+        wget https://buildroot.org/downloads/buildroot-2020.11.4.tar.gz
 
 
         tar xf buildroot-2020.11.4.tar.gz
 
 
-        mv \
-          buildroot-2020.11.4 \
-          buildroot
+        mv buildroot-2020.11.4 buildroot
 
 
 
+    # -----------------------------
+    # 显示目录确认
+    # -----------------------------
+    - name: Check files
 
-    # 配置
+      run: |
 
+        echo "===== BSP ====="
+
+        ls -la ebaz4205_buildroot
+
+
+        echo "===== Buildroot ====="
+
+        ls -la buildroot
+
+
+
+    # -----------------------------
+    # 配置 Buildroot
+    # -----------------------------
     - name: Configure Buildroot
 
       run: |
 
-
-        make \
-          -C buildroot \
+        make -C buildroot \
           BR2_EXTERNAL=$GITHUB_WORKSPACE/ebaz4205_buildroot \
           zynq_ebaz4205_defconfig
 
 
 
-
-    # 编译
-
-    - name: Build Linux
+    # -----------------------------
+    # 查看关键配置
+    # -----------------------------
+    - name: Show config
 
       run: |
 
-
-        make \
-          -C buildroot \
-          -j$(nproc)
+        grep -E "BR2_SYSTEM_DHCP|BR2_PACKAGE_DROPBEAR|BR2_TARGET_UBOOT" buildroot/.config || true
 
 
 
+    # -----------------------------
+    # 编译
+    # -----------------------------
+    - name: Build
 
+      run: |
+
+        make -C buildroot -j$(nproc)
+
+
+
+    # -----------------------------
+    # 查看输出
+    # -----------------------------
+    - name: Show images
+
+      run: |
+
+        echo "===== output/images ====="
+
+        ls -lh buildroot/output/images
+
+
+
+    # -----------------------------
     # 上传结果
-
-    - name: Upload Linux images
+    # -----------------------------
+    - name: Upload images
 
       uses: actions/upload-artifact@v4
 
       with:
 
-
         name: ebaz4205-linux-images
 
-
-        path:
-
-          buildroot/output/images/
+        path: buildroot/output/images/
